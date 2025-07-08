@@ -741,7 +741,7 @@ class GameOfLife:
     def draw_footer(self):
         # Define your lines
         lines = [
-            "Game of Life Simulator - Created by Sid",
+            "Game of Life Simulator - by Sid",
             "GitHub: https://github.com/Sidd-Rai",
             "© 2025 Sid's PotatoPC Productions",
         ]
