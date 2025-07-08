@@ -34,7 +34,7 @@ class Theme:
     ui_accent: tuple
     grid: tuple
 
-# Colors/Themes
+# Themes
 THEMES = {
     "Classic": Theme("Classic", (20, 20, 20), (40, 40, 40), (255, 255, 255), (0, 0, 0), 
                      (30, 30, 30), (255, 255, 255), (0, 255, 0), (60, 60, 60)),
@@ -174,11 +174,12 @@ class Button:
         text_surface = self.font.render(self.text, True, self.text_color)
         text_rect = text_surface.get_rect(center=self.rect.center)
         screen.blit(text_surface, text_rect)
+    
 
 class GameOfLife:
     def __init__(self):
         self.screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.RESIZABLE)
-        pygame.display.set_caption("Advanced Game of Life")
+        pygame.display.set_caption("Game of Life")
         self.clock = pygame.time.Clock()
 
         # Window dimensions (for resizable window)
@@ -587,6 +588,12 @@ class GameOfLife:
             elif event.type == pygame.MOUSEWHEEL:
                 if pygame.key.get_pressed()[pygame.K_LCTRL]:
                     self.speed = max(1, min(60, self.speed + event.y))
+            # Handle footer link click
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                if hasattr(self, 'github_link_rect') and self.github_link_rect.collidepoint(event.pos):
+                    import webbrowser
+                    webbrowser.open("https://github.com/Sidd-Rai")
+
 
         return True
 
@@ -652,7 +659,7 @@ class GameOfLife:
             button.draw(self.screen)
 
         # Draw current theme and selected pattern info
-        current_info_y = self.ui_sections["patterns_y"] + 180  # Reduced from 140
+        current_info_y = self.ui_sections["patterns_y"] + 180  
 
         theme_text = f"Current: {self.current_theme}"
         theme_surface = self.font_small.render(theme_text, True, self.theme.ui_accent)
@@ -670,7 +677,7 @@ class GameOfLife:
             words = self.selected_pattern.description.split()
             line = ""
             for word in words:
-                if len(line + word) < 25:  # Reduced from 30
+                if len(line + word) < 25:  
                     line += word + " "
                 else:
                     desc_lines.append(line.strip())
@@ -731,6 +738,44 @@ class GameOfLife:
                                 preview_surface.fill(self.theme.ui_accent)
                                 self.screen.blit(preview_surface, preview_rect)
 
+    def draw_footer(self):
+        # Define your lines
+        lines = [
+            "Game of Life Simulator - Created by Sid",
+            "GitHub: https://github.com/Sidd-Rai",
+            "© 2025 Sid's PotatoPC Productions",
+        ]
+    
+        padding = 10
+        line_spacing = 4
+    
+        y_offset = self.window_height - padding
+    
+        self.github_link_rect = None  # Reset each frame
+    
+        for i in reversed(range(len(lines))):
+            line = lines[i]
+            # Use accent color for the GitHub line to make it stand out
+            if "GitHub" in line:
+                color = self.theme.ui_accent
+            else:
+                color = self.theme.ui_text
+    
+            text_surface = self.font_small.render(line, True, color)
+            y_offset -= text_surface.get_height()
+    
+            self.screen.blit(text_surface, (padding, y_offset))
+    
+            # Save GitHub link rect for clicks
+            if "GitHub" in line:
+                self.github_link_rect = pygame.Rect(
+                    padding, y_offset,
+                    text_surface.get_width(),
+                    text_surface.get_height()
+                )
+    
+            y_offset -= line_spacing
+    
     def run(self):
         running = True
         
@@ -757,6 +802,8 @@ class GameOfLife:
             self.draw_grid()
             self.draw_pattern_preview()
             self.draw_ui()
+            self.draw_footer()
+
             
             # Update display
             pygame.display.flip()
@@ -780,7 +827,7 @@ def main():
 
 if __name__ == "__main__":
     # Add some startup patterns for demonstration
-    print("🎮 Advanced Game of Life - Commercial Edition")
+    print("🎮 Game of Life")
     print("=" * 50)
     print("Features:")
     print("• Multiple themes (Classic, Neon, Matrix, Ocean, Fire)")
