@@ -18,23 +18,23 @@ WINDOW_HEIGHT = 900
 GRID_WIDTH = 100
 GRID_HEIGHT = 60
 CELL_SIZE = 12
-SIDEBAR_WIDTH = 300
+SIDEBAR_WIDTH = 320
 HEADER_HEIGHT = 80
 
-# Colors
+# Theme class definition
+@dataclass
 class Theme:
-    def __init__(self, name: str, bg: tuple, grid: tuple, cell_alive: tuple, cell_dead: tuple, 
-                 ui_bg: tuple, ui_text: tuple, ui_accent: tuple, ui_button: tuple):
-        self.name = name
-        self.bg = bg
-        self.grid = grid
-        self.cell_alive = cell_alive
-        self.cell_dead = cell_dead
-        self.ui_bg = ui_bg
-        self.ui_text = ui_text
-        self.ui_accent = ui_accent
-        self.ui_button = ui_button
+    name: str
+    bg: tuple
+    ui_bg: tuple
+    cell_alive: tuple
+    cell_dead: tuple
+    ui_button: tuple
+    ui_text: tuple
+    ui_accent: tuple
+    grid: tuple
 
+# Colors/Themes
 THEMES = {
     "Classic": Theme("Classic", (20, 20, 20), (40, 40, 40), (255, 255, 255), (0, 0, 0), 
                      (30, 30, 30), (255, 255, 255), (0, 255, 0), (60, 60, 60)),
@@ -155,7 +155,7 @@ class Button:
         self.is_hovered = False
         self.is_pressed = False
     
-    def handle_event(self, event) -> bool:
+    def handle_event(self, event):
         if event.type == pygame.MOUSEBUTTONDOWN:
             if self.rect.collidepoint(event.pos):
                 self.is_pressed = True
@@ -177,94 +177,148 @@ class Button:
 
 class GameOfLife:
     def __init__(self):
-        self.screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
-        pygame.display.set_caption("Advanced Game of Life - Commercial Edition")
+        self.screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.RESIZABLE)
+        pygame.display.set_caption("Advanced Game of Life")
         self.clock = pygame.time.Clock()
-        
+
+        # Window dimensions (for resizable window)
+        self.window_width = WINDOW_WIDTH
+        self.window_height = WINDOW_HEIGHT
+
         # Game state
         self.grid = np.zeros((GRID_HEIGHT, GRID_WIDTH), dtype=int)
         self.previous_grid = np.zeros((GRID_HEIGHT, GRID_WIDTH), dtype=int)
         self.state = GameState.PAUSED
         self.current_theme = "Classic"
         self.theme = THEMES[self.current_theme]
-        
+
+        # Display options
+        self.show_grid = True
+
         # Timing
         self.speed = 10  # Updates per second
         self.last_update = 0
         self.start_time = time.time()
-        
+
         # Statistics
         self.stats = Statistics()
-        
+
         # UI
         self.font_small = pygame.font.Font(None, 20)
         self.font_medium = pygame.font.Font(None, 24)
         self.font_large = pygame.font.Font(None, 32)
-        
-        # Grid offset for panning
-        self.grid_offset_x = 0
-        self.grid_offset_y = 0
+
+        # Grid offset for panning - center the grid initially
+        self.grid_offset_x = (self.window_width - SIDEBAR_WIDTH - GRID_WIDTH * CELL_SIZE) // 2
+        self.grid_offset_y = (self.window_height - GRID_HEIGHT * CELL_SIZE) // 2
         self.is_panning = False
         self.pan_start = (0, 0)
-        
+
         # Selected pattern
         self.selected_pattern = None
         self.pattern_preview = None
-        
+
         # History for undo/redo
         self.history = []
         self.history_index = -1
         self.max_history = 50
-        
+
         # Drawing
         self.is_drawing = False
         self.draw_mode = True  # True for drawing, False for erasing
-        
+
         self.setup_ui()
-    
     def setup_ui(self):
-        # Control buttons
-        button_width = 80
-        button_height = 30
-        start_x = WINDOW_WIDTH - SIDEBAR_WIDTH + 20
-        start_y = 120
-        
+        """Sets up UI elements with proper vertical spacing"""
+        button_width = 70
+        button_height = 28
+        spacing = 8
+
+        sidebar_x = self.window_width - SIDEBAR_WIDTH + 20
+
+        # --- Title position ---
+        title_y = 20
+
+        # --- Stats block position ---
+        stats_y = title_y + 40
+        stats_lines = 6  # Update if you add more stats
+        stats_block_height = stats_y + stats_lines * 16
+
+        # --- Controls section ---
+        controls_y = stats_block_height + 30  # 30px below stats
+        buttons_y = controls_y + 25  # 25px gap after label
+
+        start_x = sidebar_x
+        start_y = buttons_y
+
         self.buttons = {
             "play_pause": Button(start_x, start_y, button_width, button_height, 
-                               "Play", self.font_small, self.theme.ui_button, self.theme.ui_text),
-            "step": Button(start_x + 90, start_y, button_width, button_height, 
-                          "Step", self.font_small, self.theme.ui_button, self.theme.ui_text),
-            "clear": Button(start_x, start_y + 40, button_width, button_height, 
-                           "Clear", self.font_small, self.theme.ui_button, self.theme.ui_text),
-            "random": Button(start_x + 90, start_y + 40, button_width, button_height, 
-                            "Random", self.font_small, self.theme.ui_button, self.theme.ui_text),
-            "save": Button(start_x, start_y + 80, button_width, button_height, 
-                          "Save", self.font_small, self.theme.ui_button, self.theme.ui_text),
-            "load": Button(start_x + 90, start_y + 80, button_width, button_height, 
-                          "Load", self.font_small, self.theme.ui_button, self.theme.ui_text),
-            "undo": Button(start_x, start_y + 120, button_width, button_height, 
-                          "Undo", self.font_small, self.theme.ui_button, self.theme.ui_text),
-            "redo": Button(start_x + 90, start_y + 120, button_width, button_height, 
-                          "Redo", self.font_small, self.theme.ui_button, self.theme.ui_text),
+                                 "Play", self.font_small, self.theme.ui_button, self.theme.ui_text),
+            "step": Button(start_x + (button_width + spacing), start_y, button_width, button_height,
+                           "Step", self.font_small, self.theme.ui_button, self.theme.ui_text),
+            "clear": Button(start_x + 2*(button_width + spacing), start_y, button_width, button_height,
+                            "Clear", self.font_small, self.theme.ui_button, self.theme.ui_text),
+            "random": Button(start_x, start_y + (button_height + spacing), button_width, button_height,
+                             "Random", self.font_small, self.theme.ui_button, self.theme.ui_text),
+            "save": Button(start_x + (button_width + spacing), start_y + (button_height + spacing),
+                           button_width, button_height, "Save", self.font_small, self.theme.ui_button, self.theme.ui_text),
+            "load": Button(start_x + 2*(button_width + spacing), start_y + (button_height + spacing),
+                           button_width, button_height, "Load", self.font_small, self.theme.ui_button, self.theme.ui_text),
+            "undo": Button(start_x, start_y + 2*(button_height + spacing), button_width, button_height,
+                           "Undo", self.font_small, self.theme.ui_button, self.theme.ui_text),
+            "redo": Button(start_x + (button_width + spacing), start_y + 2*(button_height + spacing),
+                           button_width, button_height, "Redo", self.font_small, self.theme.ui_button, self.theme.ui_text),
+            "toggle_grid": Button(start_x + 2*(button_width + spacing), start_y + 2*(button_height + spacing),
+                                  button_width, button_height, "Grid: ON", self.font_small, self.theme.ui_button, self.theme.ui_text),
         }
-        
-        # Theme buttons
-        theme_y = start_y + 200
+
+        # --- Themes section ---
+        controls_block_height = start_y + 3*(button_height + spacing)
+        themes_y = controls_y + 25 + (controls_block_height - buttons_y) + 30  # Label after buttons + gap
+        theme_buttons_y = themes_y + 25
+
+        theme_button_width = 85
+        theme_button_height = 25
+        themes_per_row = 3
+
         for i, theme_name in enumerate(THEMES.keys()):
-            self.buttons[f"theme_{theme_name}"] = Button(
-                start_x, theme_y + i * 35, 120, 30, theme_name, 
-                self.font_small, self.theme.ui_button, self.theme.ui_text
-            )
-        
-        # Pattern buttons
-        pattern_y = theme_y + len(THEMES) * 35 + 30
-        for i, pattern_name in enumerate(PATTERNS.keys()):
-            if i < 8:  # Limit display
-                self.buttons[f"pattern_{pattern_name}"] = Button(
-                    start_x, pattern_y + i * 25, 200, 20, pattern_name, 
-                    self.font_small, self.theme.ui_button, self.theme.ui_text
-                )
-    
+            row = i // themes_per_row
+            col = i % themes_per_row
+            x = start_x + col * (theme_button_width + spacing)
+            y = theme_buttons_y + row * (theme_button_height + spacing)
+            self.buttons[f"theme_{theme_name}"] = Button(x, y, theme_button_width, theme_button_height,
+                                                         theme_name, self.font_small, self.theme.ui_button, self.theme.ui_text)
+
+        # --- Patterns section ---
+        themes_block_height = theme_buttons_y + ((len(THEMES) - 1) // themes_per_row + 1) * (theme_button_height + spacing)
+        patterns_y = themes_y + 25 + (themes_block_height - theme_buttons_y) + 30
+        patterns_buttons_y = patterns_y + 25
+
+        pattern_button_width = 100
+        pattern_button_height = 24
+        patterns_per_row = 2
+        pattern_spacing = 10
+
+        pattern_names = list(PATTERNS.keys())[:8]
+
+        for i, pattern_name in enumerate(pattern_names):
+            row = i // patterns_per_row
+            col = i % patterns_per_row
+            x = start_x + col * (pattern_button_width + pattern_spacing)
+            y = patterns_buttons_y + row * (pattern_button_height + pattern_spacing)
+
+            display_name = pattern_name if len(pattern_name) <= 10 else pattern_name[:10] + "..."
+            self.buttons[f"pattern_{pattern_name}"] = Button(x, y, pattern_button_width, pattern_button_height,
+                                                              display_name, self.font_small, self.theme.ui_button, self.theme.ui_text)
+
+        # Store for section labels
+        self.ui_sections = {
+            "controls_y": controls_y,
+            "themes_y": themes_y,
+            "patterns_y": patterns_y
+        }
+
+
     def save_to_history(self):
         if self.history_index < len(self.history) - 1:
             self.history = self.history[:self.history_index + 1]
@@ -371,6 +425,10 @@ class GameOfLife:
         self.stats = Statistics()
         self.start_time = time.time()
     
+    def toggle_grid(self):
+        self.show_grid = not self.show_grid
+        self.buttons["toggle_grid"].text = f"Grid: {'ON' if self.show_grid else 'OFF'}"
+    
     def save_pattern(self, filename: str):
         try:
             data = {
@@ -406,81 +464,6 @@ class GameOfLife:
         except Exception as e:
             print(f"Error loading pattern: {e}")
     
-    def handle_events(self):
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                return False
-            
-            # Handle button clicks
-            for button_name, button in self.buttons.items():
-                if button.handle_event(event):
-                    self.handle_button_click(button_name)
-            
-            # Handle keyboard shortcuts
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_SPACE:
-                    self.state = GameState.RUNNING if self.state == GameState.PAUSED else GameState.PAUSED
-                elif event.key == pygame.K_c:
-                    self.clear_grid()
-                elif event.key == pygame.K_r:
-                    self.fill_random()
-                elif event.key == pygame.K_s and pygame.key.get_pressed()[pygame.K_LCTRL]:
-                    self.save_pattern("saved_pattern.json")
-                elif event.key == pygame.K_l and pygame.key.get_pressed()[pygame.K_LCTRL]:
-                    self.load_pattern("saved_pattern.json")
-                elif event.key == pygame.K_z and pygame.key.get_pressed()[pygame.K_LCTRL]:
-                    self.undo()
-                elif event.key == pygame.K_y and pygame.key.get_pressed()[pygame.K_LCTRL]:
-                    self.redo()
-                elif event.key == pygame.K_ESCAPE:
-                    self.selected_pattern = None
-                elif event.key == pygame.K_1:
-                    self.speed = max(1, self.speed - 1)
-                elif event.key == pygame.K_2:
-                    self.speed = min(60, self.speed + 1)
-            
-            # Handle mouse events
-            if event.type == pygame.MOUSEBUTTONDOWN:
-                if event.button == 1:  # Left click
-                    if event.pos[0] < WINDOW_WIDTH - SIDEBAR_WIDTH:
-                        if self.selected_pattern:
-                            self.place_pattern(self.selected_pattern, event.pos[0], event.pos[1])
-                            self.selected_pattern = None
-                        else:
-                            self.draw_mode = True
-                            self.toggle_cell(event.pos[0], event.pos[1])
-                elif event.button == 3:  # Right click
-                    if event.pos[0] < WINDOW_WIDTH - SIDEBAR_WIDTH:
-                        self.draw_mode = False
-                        self.toggle_cell(event.pos[0], event.pos[1])
-                elif event.button == 2:  # Middle click for panning
-                    self.is_panning = True
-                    self.pan_start = event.pos
-            
-            elif event.type == pygame.MOUSEBUTTONUP:
-                if event.button == 1 or event.button == 3:
-                    self.is_drawing = False
-                elif event.button == 2:
-                    self.is_panning = False
-            
-            elif event.type == pygame.MOUSEMOTION:
-                if self.is_panning:
-                    dx = event.pos[0] - self.pan_start[0]
-                    dy = event.pos[1] - self.pan_start[1]
-                    self.grid_offset_x += dx
-                    self.grid_offset_y += dy
-                    self.pan_start = event.pos
-                
-                if self.is_drawing and event.pos[0] < WINDOW_WIDTH - SIDEBAR_WIDTH:
-                    self.toggle_cell(event.pos[0], event.pos[1])
-            
-            # Handle mouse wheel for speed control
-            elif event.type == pygame.MOUSEWHEEL:
-                if pygame.key.get_pressed()[pygame.K_LCTRL]:
-                    self.speed = max(1, min(60, self.speed + event.y))
-        
-        return True
-    
     def handle_button_click(self, button_name: str):
         if button_name == "play_pause":
             self.state = GameState.RUNNING if self.state == GameState.PAUSED else GameState.PAUSED
@@ -500,16 +483,116 @@ class GameOfLife:
             self.undo()
         elif button_name == "redo":
             self.redo()
+        elif button_name == "toggle_grid":
+            self.toggle_grid()
         elif button_name.startswith("theme_"):
             theme_name = button_name.replace("theme_", "")
             self.change_theme(theme_name)
         elif button_name.startswith("pattern_"):
             pattern_name = button_name.replace("pattern_", "")
             self.selected_pattern = PATTERNS[pattern_name]
-    
+    def handle_events(self):
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return False
+
+            # Handle window resize
+            if event.type == pygame.VIDEORESIZE:
+                self.window_width = max(800, event.w)
+                self.window_height = max(600, event.h)
+                self.screen = pygame.display.set_mode((self.window_width, self.window_height), pygame.RESIZABLE)
+                self.setup_ui()  # Recreate UI with new positions
+                # Center the grid when resizing
+                self.grid_offset_x = (self.window_width - SIDEBAR_WIDTH - GRID_WIDTH * CELL_SIZE) // 2
+                self.grid_offset_y = (self.window_height - GRID_HEIGHT * CELL_SIZE) // 2
+
+            # Handle button clicks
+            for button_name, button in self.buttons.items():
+                if button.handle_event(event):
+                    self.handle_button_click(button_name)
+
+            # Handle keyboard shortcuts
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_SPACE:
+                    self.state = GameState.RUNNING if self.state == GameState.PAUSED else GameState.PAUSED
+                    self.buttons["play_pause"].text = "Pause" if self.state == GameState.RUNNING else "Play"
+                elif event.key == pygame.K_c:
+                    self.clear_grid()
+                elif event.key == pygame.K_r:
+                    self.fill_random()
+                elif event.key == pygame.K_g:
+                    self.toggle_grid()
+                elif event.key == pygame.K_s and pygame.key.get_pressed()[pygame.K_LCTRL]:
+                    self.save_pattern("saved_pattern.json")
+                elif event.key == pygame.K_l and pygame.key.get_pressed()[pygame.K_LCTRL]:
+                    self.load_pattern("saved_pattern.json")
+                elif event.key == pygame.K_z and pygame.key.get_pressed()[pygame.K_LCTRL]:
+                    self.undo()
+                elif event.key == pygame.K_y and pygame.key.get_pressed()[pygame.K_LCTRL]:
+                    self.redo()
+                elif event.key == pygame.K_ESCAPE:
+                    self.selected_pattern = None
+                elif event.key == pygame.K_1:
+                    self.speed = max(1, self.speed - 1)
+                elif event.key == pygame.K_2:
+                    self.speed = min(60, self.speed + 1)
+                elif event.key == pygame.K_F11:
+                    # Toggle fullscreen
+                    pygame.display.toggle_fullscreen()
+                    # Get new screen dimensions
+                    info = pygame.display.Info()
+                    self.window_width = info.current_w
+                    self.window_height = info.current_h
+                    self.setup_ui()
+                    # Center the grid
+                    self.grid_offset_x = (self.window_width - SIDEBAR_WIDTH - GRID_WIDTH * CELL_SIZE) // 2
+                    self.grid_offset_y = (self.window_height - GRID_HEIGHT * CELL_SIZE) // 2
+
+            # Handle mouse events
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                if event.button == 1:  # Left click
+                    if event.pos[0] < self.window_width - SIDEBAR_WIDTH:
+                        if self.selected_pattern:
+                            self.place_pattern(self.selected_pattern, event.pos[0], event.pos[1])
+                            self.selected_pattern = None
+                        else:
+                            self.draw_mode = True
+                            self.toggle_cell(event.pos[0], event.pos[1])
+                elif event.button == 3:  # Right click
+                    if event.pos[0] < self.window_width - SIDEBAR_WIDTH:
+                        self.draw_mode = False
+                        self.toggle_cell(event.pos[0], event.pos[1])
+                elif event.button == 2:  # Middle click for panning
+                    self.is_panning = True
+                    self.pan_start = event.pos
+
+            elif event.type == pygame.MOUSEBUTTONUP:
+                if event.button == 1 or event.button == 3:
+                    self.is_drawing = False
+                elif event.button == 2:
+                    self.is_panning = False
+
+            elif event.type == pygame.MOUSEMOTION:
+                if self.is_panning:
+                    dx = event.pos[0] - self.pan_start[0]
+                    dy = event.pos[1] - self.pan_start[1]
+                    self.grid_offset_x += dx
+                    self.grid_offset_y += dy
+                    self.pan_start = event.pos
+
+                if self.is_drawing and event.pos[0] < self.window_width - SIDEBAR_WIDTH:
+                    self.toggle_cell(event.pos[0], event.pos[1])
+
+            # Handle mouse wheel for speed control
+            elif event.type == pygame.MOUSEWHEEL:
+                if pygame.key.get_pressed()[pygame.K_LCTRL]:
+                    self.speed = max(1, min(60, self.speed + event.y))
+
+        return True
+
     def draw_grid(self):
         # Draw grid background
-        grid_rect = pygame.Rect(0, 0, WINDOW_WIDTH - SIDEBAR_WIDTH, WINDOW_HEIGHT)
+        grid_rect = pygame.Rect(0, 0, self.window_width - SIDEBAR_WIDTH, self.window_height)
         pygame.draw.rect(self.screen, self.theme.bg, grid_rect)
         
         # Draw cells
@@ -518,7 +601,7 @@ class GameOfLife:
                 x = col * CELL_SIZE + self.grid_offset_x
                 y = row * CELL_SIZE + self.grid_offset_y
                 
-                if -CELL_SIZE <= x < WINDOW_WIDTH - SIDEBAR_WIDTH and -CELL_SIZE <= y < WINDOW_HEIGHT:
+                if -CELL_SIZE <= x < self.window_width - SIDEBAR_WIDTH and -CELL_SIZE <= y < self.window_height:
                     cell_rect = pygame.Rect(x, y, CELL_SIZE, CELL_SIZE)
                     
                     if self.grid[row, col] == 1:
@@ -526,101 +609,110 @@ class GameOfLife:
                     else:
                         pygame.draw.rect(self.screen, self.theme.cell_dead, cell_rect)
                     
-                    # Draw grid lines
-                    pygame.draw.rect(self.screen, self.theme.grid, cell_rect, 1)
-    
+                    # Draw grid lines only if enabled
+                    if self.show_grid:
+                        pygame.draw.rect(self.screen, self.theme.grid, cell_rect, 1)
+
     def draw_ui(self):
         # Draw sidebar
-        sidebar_rect = pygame.Rect(WINDOW_WIDTH - SIDEBAR_WIDTH, 0, SIDEBAR_WIDTH, WINDOW_HEIGHT)
+        sidebar_rect = pygame.Rect(self.window_width - SIDEBAR_WIDTH, 0, SIDEBAR_WIDTH, self.window_height)
         pygame.draw.rect(self.screen, self.theme.ui_bg, sidebar_rect)
-        
+
         # Draw title
         title_surface = self.font_large.render("Game of Life", True, self.theme.ui_text)
-        self.screen.blit(title_surface, (WINDOW_WIDTH - SIDEBAR_WIDTH + 20, 20))
-        
+        self.screen.blit(title_surface, (self.window_width - SIDEBAR_WIDTH + 20, 20))
+
         # Draw statistics
-        stats_y = 60
+        stats_y = 55  # Increased from 50
         stats_text = [
-            f"Generation: {self.stats.generation}",
-            f"Population: {self.stats.population}",
-            f"Max Population: {self.stats.max_population}",
+            f"Gen: {self.stats.generation}",
+            f"Pop: {self.stats.population}",
+            f"Max: {self.stats.max_population}",
             f"Births: {self.stats.births}",
             f"Deaths: {self.stats.deaths}",
-            f"Total Births: {self.stats.total_births}",
-            f"Total Deaths: {self.stats.total_deaths}",
-            f"Speed: {self.speed} FPS",
-            f"Runtime: {time.time() - self.start_time:.1f}s"
+            f"Speed: {self.speed} FPS"
         ]
-        
+
         for i, text in enumerate(stats_text):
             text_surface = self.font_small.render(text, True, self.theme.ui_text)
-            self.screen.blit(text_surface, (WINDOW_WIDTH - SIDEBAR_WIDTH + 20, stats_y + i * 20))
-        
+            self.screen.blit(text_surface, (self.window_width - SIDEBAR_WIDTH + 20, stats_y + i * 16))
+
+        # Draw section labels
+        controls_label = self.font_medium.render("Controls", True, self.theme.ui_accent)
+        self.screen.blit(controls_label, (self.window_width - SIDEBAR_WIDTH + 20, self.ui_sections["controls_y"]))
+
+        themes_label = self.font_medium.render("Themes", True, self.theme.ui_accent)
+        self.screen.blit(themes_label, (self.window_width - SIDEBAR_WIDTH + 20, self.ui_sections["themes_y"]))
+
+        patterns_label = self.font_medium.render("Patterns", True, self.theme.ui_accent)
+        self.screen.blit(patterns_label, (self.window_width - SIDEBAR_WIDTH + 20, self.ui_sections["patterns_y"]))
+
         # Draw buttons
         for button in self.buttons.values():
             button.draw(self.screen)
-        
-        # Draw current theme indicator
-        theme_text = f"Theme: {self.current_theme}"
+
+        # Draw current theme and selected pattern info
+        current_info_y = self.ui_sections["patterns_y"] + 180  # Reduced from 140
+
+        theme_text = f"Current: {self.current_theme}"
         theme_surface = self.font_small.render(theme_text, True, self.theme.ui_accent)
-        self.screen.blit(theme_surface, (WINDOW_WIDTH - SIDEBAR_WIDTH + 20, 420))
-        
+        self.screen.blit(theme_surface, (self.window_width - SIDEBAR_WIDTH + 20, current_info_y))
+
         # Draw selected pattern indicator
         if self.selected_pattern:
             pattern_text = f"Selected: {self.selected_pattern.name}"
             pattern_surface = self.font_small.render(pattern_text, True, self.theme.ui_accent)
-            self.screen.blit(pattern_surface, (WINDOW_WIDTH - SIDEBAR_WIDTH + 20, 440))
-            
-            # Draw pattern description
+            self.screen.blit(pattern_surface, (self.window_width - SIDEBAR_WIDTH + 20, current_info_y + 20))
+
+            # Draw pattern description (wrapped)
+            desc_y = current_info_y + 40
             desc_lines = []
             words = self.selected_pattern.description.split()
             line = ""
             for word in words:
-                if len(line + word) < 35:
+                if len(line + word) < 25:  # Reduced from 30
                     line += word + " "
                 else:
                     desc_lines.append(line.strip())
                     line = word + " "
-            desc_lines.append(line.strip())
-            
-            for i, line in enumerate(desc_lines):
+            if line:
+                desc_lines.append(line.strip())
+
+            for i, line in enumerate(desc_lines[:3]):  # Max 3 lines
                 desc_surface = self.font_small.render(line, True, self.theme.ui_text)
-                self.screen.blit(desc_surface, (WINDOW_WIDTH - SIDEBAR_WIDTH + 20, 460 + i * 15))
-        
-        # Draw controls help
-        help_y = 520
+                self.screen.blit(desc_surface, (self.window_width - SIDEBAR_WIDTH + 20, desc_y + i * 15))
+
+        # Draw controls help at the bottom
+        help_y = self.window_height - 180  
         help_text = [
-            "Controls:",
+            "Shortcuts:",
             "Space - Play/Pause",
-            "C - Clear grid",
-            "R - Random fill",
-            "Ctrl+S - Save",
-            "Ctrl+L - Load",
-            "Ctrl+Z - Undo",
-            "Ctrl+Y - Redo",
-            "1/2 - Speed control",
-            "Left click - Draw",
-            "Right click - Erase",
-            "Middle click - Pan",
-            "Ctrl+Wheel - Speed"
+            "C - Clear  R - Random",
+            "Ctrl+S/L - Save/Load",
+            "Ctrl+Z/Y - Undo/Redo",
+            "1/2 - Speed ±",
+            "G - Toggle Grid",
+            "Left/Right click - Draw/Erase",
+            "Middle click - Pan"
         ]
-        
+
         for i, text in enumerate(help_text):
             if i == 0:
                 text_surface = self.font_medium.render(text, True, self.theme.ui_accent)
             else:
                 text_surface = self.font_small.render(text, True, self.theme.ui_text)
-            self.screen.blit(text_surface, (WINDOW_WIDTH - SIDEBAR_WIDTH + 20, help_y + i * 18))
-        
+            self.screen.blit(text_surface, (self.window_width - SIDEBAR_WIDTH + 20, help_y + i * 16))
+
         # Draw separator line
         pygame.draw.line(self.screen, self.theme.grid, 
-                        (WINDOW_WIDTH - SIDEBAR_WIDTH, 0), 
-                        (WINDOW_WIDTH - SIDEBAR_WIDTH, WINDOW_HEIGHT), 2)
-    
+                        (self.window_width - SIDEBAR_WIDTH, 0), 
+                        (self.window_width - SIDEBAR_WIDTH, self.window_height), 2)
+
+ 
     def draw_pattern_preview(self):
         if self.selected_pattern:
             mouse_pos = pygame.mouse.get_pos()
-            if mouse_pos[0] < WINDOW_WIDTH - SIDEBAR_WIDTH:
+            if mouse_pos[0] < self.window_width - SIDEBAR_WIDTH:
                 grid_x = (mouse_pos[0] - self.grid_offset_x) // CELL_SIZE
                 grid_y = (mouse_pos[1] - self.grid_offset_y) // CELL_SIZE
                 
@@ -631,14 +723,14 @@ class GameOfLife:
                             preview_x = (grid_x + col) * CELL_SIZE + self.grid_offset_x
                             preview_y = (grid_y + row) * CELL_SIZE + self.grid_offset_y
                             
-                            if 0 <= preview_x < WINDOW_WIDTH - SIDEBAR_WIDTH and 0 <= preview_y < WINDOW_HEIGHT:
+                            if 0 <= preview_x < self.window_width - SIDEBAR_WIDTH and 0 <= preview_y < self.window_height:
                                 preview_rect = pygame.Rect(preview_x, preview_y, CELL_SIZE, CELL_SIZE)
                                 # Draw semi-transparent preview
                                 preview_surface = pygame.Surface((CELL_SIZE, CELL_SIZE))
                                 preview_surface.set_alpha(128)
                                 preview_surface.fill(self.theme.ui_accent)
                                 self.screen.blit(preview_surface, preview_rect)
-    
+
     def run(self):
         running = True
         
@@ -672,7 +764,10 @@ class GameOfLife:
         
         pygame.quit()
         sys.exit()
-
+# New method to toggle grid display
+def toggle_grid(self):
+    self.show_grid = not self.show_grid
+    self.buttons["toggle_grid"].text = f"Grid: {'ON' if self.show_grid else 'OFF'}"
 def main():
     """Main function to run the Game of Life"""
     try:
