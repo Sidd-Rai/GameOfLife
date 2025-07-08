@@ -6,6 +6,9 @@ I asked different AI coding assistants to help me generate the code, mixed and m
 
 ---
 
+![Screenshot of Game of Life](https://github.com/Sidd-Rai/GameOfLife/blob/main/screenshots/GameScreenshot.png)
+
+
 ## ✨ What is it?
 
 **Conway’s Game of Life** is a famous zero-player game - you set it up and just watch how the cells live, die and evolve based on simple rules.
